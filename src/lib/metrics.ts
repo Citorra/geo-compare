@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { FetchedPage, fetchPage, fetchRobots, originOf, probeUrl } from "./fetcher";
 import {
-  CATEGORY_WEIGHTS,
+  GEO_SEO_WEIGHTS,
   MetricCategory,
   MetricResult,
   SiteAudit,
@@ -52,6 +52,36 @@ const METRIC_WHY: Record<string, string> = {
     "If robots.txt blocks GPTBot, ClaudeBot and similar agents, your content can't be cited by those AI assistants at all.",
 };
 
+/**
+ * Metric ids that count toward the GEO subtotal — signals that drive whether AI
+ * assistants can find, parse and cite the page. Drives the GEO-tilted total
+ * (see `aggregate`) and the card's GEO tags.
+ *
+ * GEO and SEO are independent tags, not strict opposites — a metric may sit in
+ * both sets. Every metric must appear in at least one of the two.
+ */
+const GEO_METRICS = new Set<string>([
+  "llms_txt",
+  "json_ld",
+  "faq",
+  "ai_crawlers",
+  "semantic_html",
+  "heading_hierarchy",
+  "word_count",
+  "open_graph",
+  "twitter_card",
+]);
+
+/** Metric ids that count toward the SEO subtotal. May overlap `GEO_METRICS`. */
+const SEO_METRICS = new Set<string>([
+  "h1_count",
+  "https",
+  "sitemap",
+  "viewport",
+  "ttfb",
+  "canonical",
+]);
+
 function metric(
   id: string,
   label: string,
@@ -70,6 +100,8 @@ function metric(
     why: METRIC_WHY[id],
     status: statusFromScore(s),
     weight,
+    geo: GEO_METRICS.has(id),
+    seo: SEO_METRICS.has(id),
   };
 }
 
@@ -434,27 +466,37 @@ async function checkTechnical(page: FetchedPage, $: cheerio.CheerioAPI): Promise
 /* Aggregation                                                            */
 /* ---------------------------------------------------------------------- */
 
+/** Weighted average of metric scores (0..100), rounded; 0 for an empty set. */
+function weightedAverage(rows: MetricResult[]): number {
+  const weighted = rows.reduce((s, m) => s + m.score * (m.weight ?? 1), 0);
+  const wsum = rows.reduce((s, m) => s + (m.weight ?? 1), 0);
+  return wsum > 0 ? Math.round(weighted / wsum) : 0;
+}
+
 function aggregate(metrics: MetricResult[]): {
   total: number;
+  geoScore: number;
+  seoScore: number;
   byCategory: Record<MetricCategory, number>;
 } {
+  // Per-category subtotals — shown as the card's section breakdown only.
   const byCategory: Record<MetricCategory, number> = {
     discovery: 0,
     structure: 0,
     technical: 0,
   };
   for (const cat of Object.keys(byCategory) as MetricCategory[]) {
-    const rows = metrics.filter((m) => m.category === cat);
-    const weighted = rows.reduce((s, m) => s + m.score * (m.weight ?? 1), 0);
-    const wsum = rows.reduce((s, m) => s + (m.weight ?? 1), 0);
-    byCategory[cat] = wsum > 0 ? Math.round(weighted / wsum) : 0;
+    byCategory[cat] = weightedAverage(metrics.filter((m) => m.category === cat));
   }
+
+  // GEO and SEO subtotals — these drive the total score. The tags are
+  // independent, so a metric tagged both would contribute to each.
+  const geoScore = weightedAverage(metrics.filter((m) => m.geo));
+  const seoScore = weightedAverage(metrics.filter((m) => m.seo));
   const total = Math.round(
-    (Object.keys(byCategory) as MetricCategory[])
-      .map((c) => byCategory[c] * CATEGORY_WEIGHTS[c])
-      .reduce((a, b) => a + b, 0),
+    geoScore * GEO_SEO_WEIGHTS.geo + seoScore * GEO_SEO_WEIGHTS.seo,
   );
-  return { total, byCategory };
+  return { total, geoScore, seoScore, byCategory };
 }
 
 /* ---------------------------------------------------------------------- */
@@ -472,6 +514,8 @@ export async function auditSite(url: string): Promise<SiteAudit> {
       fetchError: page.error || `HTTP ${page.status}`,
       metrics: [],
       totalScore: 0,
+      geoScore: 0,
+      seoScore: 0,
       categoryScores: { discovery: 0, structure: 0, technical: 0 },
     };
   }
@@ -482,7 +526,7 @@ export async function auditSite(url: string): Promise<SiteAudit> {
     checkTechnical(page, $),
   ]);
   const metrics = [...discovery, ...structure, ...technical];
-  const { total, byCategory } = aggregate(metrics);
+  const { total, geoScore, seoScore, byCategory } = aggregate(metrics);
   return {
     url,
     finalUrl: page.finalUrl,
@@ -490,6 +534,8 @@ export async function auditSite(url: string): Promise<SiteAudit> {
     fetchOk: true,
     metrics,
     totalScore: total,
+    geoScore,
+    seoScore,
     categoryScores: byCategory,
   };
 }

@@ -37,7 +37,8 @@ function metricRow(client?: MetricResult, competitor?: MetricResult) {
       : clientScore > competitorScore
         ? "client"
         : "competitor";
-  return { label, clientScore, competitorScore, winner, client, competitor };
+  const geo = client?.geo ?? competitor?.geo ?? false;
+  return { label, clientScore, competitorScore, winner, geo, client, competitor };
 }
 
 const ComparisonCard = React.forwardRef<HTMLDivElement, Props>(function ComparisonCard(
@@ -194,6 +195,16 @@ function SiteHeader({
         <div className="text-5xl font-bold tabular-nums">{site.totalScore}</div>
         <div className="text-sm text-citorra-mute pb-2">/ 100</div>
       </div>
+      {/* GEO is what this tool focuses on — surfaced as the primary badge,
+          with the general-SEO subtotal kept quieter alongside it. */}
+      <div className="mt-3 flex items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-citorra px-2.5 py-1 text-xs font-semibold text-white tabular-nums">
+          GEO {site.geoScore}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-citorra-mute tabular-nums">
+          SEO {site.seoScore}
+        </span>
+      </div>
     </div>
   );
 }
@@ -262,7 +273,14 @@ function MetricRow({
         )}
       >
         <div className="text-sm font-medium leading-tight">
-          <div>{row.label}</div>
+          <div className="flex items-center gap-1.5">
+            <span>{row.label}</span>
+            {row.geo && (
+              <span className="rounded bg-citorra/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-citorra">
+                GEO
+              </span>
+            )}
+          </div>
           <div className="text-xs text-citorra-mute mt-0.5 line-clamp-2">
             {row.client?.detail || row.competitor?.detail}
           </div>

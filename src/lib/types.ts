@@ -16,6 +16,17 @@ export interface MetricResult {
   why?: string;
   /** Weight inside the category total (defaults to 1) */
   weight?: number;
+  /**
+   * True when the metric counts toward the GEO subtotal (signals that drive
+   * AI/LLM citation). Set by the `metric()` helper from `GEO_METRICS`.
+   */
+  geo: boolean;
+  /**
+   * True when the metric counts toward the SEO subtotal. Set by the `metric()`
+   * helper from `SEO_METRICS`. A metric may be both GEO and SEO (e.g. social
+   * card tags), in which case it contributes to both subtotals.
+   */
+  seo: boolean;
 }
 
 export type MetricCategory = "discovery" | "structure" | "technical";
@@ -28,9 +39,13 @@ export interface SiteAudit {
   fetchOk: boolean;
   fetchError?: string;
   metrics: MetricResult[];
-  /** Weighted 0..100 across all metrics */
+  /** GEO-tilted weighted total, 0..100. Blends geoScore and seoScore via GEO_SEO_WEIGHTS. */
   totalScore: number;
-  /** Per-category subtotals (0..100) */
+  /** Weighted 0..100 across GEO-specific metrics only. */
+  geoScore: number;
+  /** Weighted 0..100 across general-SEO metrics only. */
+  seoScore: number;
+  /** Per-category subtotals (0..100) — shown as the card's section breakdown. */
   categoryScores: Record<MetricCategory, number>;
 }
 
@@ -47,9 +62,12 @@ export const CATEGORY_LABELS: Record<MetricCategory, string> = {
   technical: "Technical SEO",
 };
 
-/** Category weight in the total score (must sum to 1) */
-export const CATEGORY_WEIGHTS: Record<MetricCategory, number> = {
-  discovery: 0.4,
-  structure: 0.35,
-  technical: 0.25,
-};
+/**
+ * Split of the total score between GEO-specific signals and general SEO.
+ * GEO is what this tool focuses on, so it carries the larger share; plain SEO
+ * still counts. Must sum to 1. This is the single knob for the GEO tilt.
+ */
+export const GEO_SEO_WEIGHTS = {
+  geo: 0.7,
+  seo: 0.3,
+} as const;
