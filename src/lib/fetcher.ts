@@ -77,6 +77,35 @@ export async function probeUrl(url: string, timeoutMs = 8_000): Promise<{ ok: bo
   }
 }
 
+/**
+ * Fetches /robots.txt and returns its text body, or null if it is unreachable
+ * or doesn't return 200. A missing robots.txt means "all crawlers allowed".
+ */
+export async function fetchRobots(origin: string, timeoutMs = 8_000): Promise<string | null> {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${origin}/robots.txt`, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "User-Agent": UA, Accept: "text/plain,*/*" },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      try {
+        await res.arrayBuffer();
+      } catch {}
+      return null;
+    }
+    return await res.text();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export function normalizeUrl(input: string): string {
   const trimmed = input.trim();
   if (!trimmed) return trimmed;

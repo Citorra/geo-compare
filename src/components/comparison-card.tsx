@@ -15,6 +15,8 @@ interface Props {
   data: AuditComparison;
   clientLabel: string;
   competitorLabel: string;
+  /** When true, render the per-metric "why this matters" explanations. */
+  showWhy?: boolean;
 }
 
 function hostnameOf(url: string) {
@@ -39,7 +41,7 @@ function metricRow(client?: MetricResult, competitor?: MetricResult) {
 }
 
 const ComparisonCard = React.forwardRef<HTMLDivElement, Props>(function ComparisonCard(
-  { data, clientLabel, competitorLabel },
+  { data, clientLabel, competitorLabel, showWhy = false },
   ref,
 ) {
   const { client, competitor } = data;
@@ -123,6 +125,7 @@ const ComparisonCard = React.forwardRef<HTMLDivElement, Props>(function Comparis
             clientScore={client.categoryScores[cat]}
             competitorScore={competitor.categoryScores[cat]}
             rows={rowsByCat[cat]}
+            showWhy={showWhy}
           />
         ))}
       </div>
@@ -180,11 +183,13 @@ function CategoryBlock({
   clientScore,
   competitorScore,
   rows,
+  showWhy,
 }: {
   title: string;
   clientScore: number;
   competitorScore: number;
   rows: ReturnType<typeof metricRow>[];
+  showWhy: boolean;
 }) {
   return (
     <section>
@@ -200,24 +205,33 @@ function CategoryBlock({
       </div>
       <div className="divide-y divide-border/60 rounded-lg border bg-background/40">
         {rows.map((row) => (
-          <MetricRow key={row.label} row={row} />
+          <MetricRow key={row.label} row={row} showWhy={showWhy} />
         ))}
       </div>
     </section>
   );
 }
 
-function MetricRow({ row }: { row: ReturnType<typeof metricRow> }) {
+function MetricRow({ row, showWhy }: { row: ReturnType<typeof metricRow>; showWhy: boolean }) {
+  const why = row.client?.why || row.competitor?.why;
   return (
-    <div className="grid grid-cols-[1.1fr_1fr_1fr] gap-4 px-4 py-3 items-center">
-      <div className="text-sm font-medium leading-tight">
-        <div>{row.label}</div>
-        <div className="text-xs text-citorra-mute mt-0.5 line-clamp-2">
-          {row.client?.detail || row.competitor?.detail}
+    <div className="px-4 py-3">
+      <div className="grid grid-cols-[1.1fr_1fr_1fr] gap-4 items-center">
+        <div className="text-sm font-medium leading-tight">
+          <div>{row.label}</div>
+          <div className="text-xs text-citorra-mute mt-0.5 line-clamp-2">
+            {row.client?.detail || row.competitor?.detail}
+          </div>
         </div>
+        <BarCell score={row.clientScore} highlight={row.winner === "client"} />
+        <BarCell score={row.competitorScore} highlight={row.winner === "competitor"} muted />
       </div>
-      <BarCell score={row.clientScore} highlight={row.winner === "client"} />
-      <BarCell score={row.competitorScore} highlight={row.winner === "competitor"} muted />
+      {showWhy && why && (
+        <div className="mt-2 text-xs text-citorra-mute bg-secondary/50 rounded-md px-3 py-2 leading-snug">
+          <span className="font-semibold text-citorra-ink">Why this matters: </span>
+          {why}
+        </div>
+      )}
     </div>
   );
 }

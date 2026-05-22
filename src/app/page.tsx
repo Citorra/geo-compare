@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 import { Download, Loader2, Search } from "lucide-react";
 import ComparisonCard from "@/components/comparison-card";
 import type { AuditComparison } from "@/lib/types";
@@ -16,6 +17,7 @@ export default function Page() {
   const [competitorLabel, setCompetitorLabel] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
+  const [showWhy, setShowWhy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [data, setData] = React.useState<AuditComparison | null>(null);
   const cardRef = React.useRef<HTMLDivElement>(null);
@@ -156,6 +158,14 @@ export default function Page() {
                   )}
                 </Button>
               )}
+              {data && (
+                <div className="flex items-center gap-2">
+                  <Switch id="show-why" checked={showWhy} onCheckedChange={setShowWhy} />
+                  <Label htmlFor="show-why" className="cursor-pointer font-normal">
+                    Show &ldquo;why this matters&rdquo; notes
+                  </Label>
+                </div>
+              )}
               {error && <span className="text-sm text-destructive">{error}</span>}
             </div>
           </form>
@@ -169,6 +179,7 @@ export default function Page() {
             data={data}
             clientLabel={clientLabel}
             competitorLabel={competitorLabel}
+            showWhy={showWhy}
           />
         </div>
       )}

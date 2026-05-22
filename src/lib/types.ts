@@ -12,6 +12,8 @@ export interface MetricResult {
   status: MetricStatus;
   /** Short human explanation of the result */
   detail: string;
+  /** Static, result-independent "why this matters" line for client-facing output */
+  why?: string;
   /** Weight inside the category total (defaults to 1) */
   weight?: number;
 }

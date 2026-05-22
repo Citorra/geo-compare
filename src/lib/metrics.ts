@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { FetchedPage, fetchPage, originOf, probeUrl } from "./fetcher";
+import { FetchedPage, fetchPage, fetchRobots, originOf, probeUrl } from "./fetcher";
 import {
   CATEGORY_WEIGHTS,
   MetricCategory,
@@ -17,6 +17,41 @@ function statusFromScore(score: number): "pass" | "partial" | "fail" {
   return "fail";
 }
 
+/**
+ * Static "why this matters" copy, keyed by metric id. Result-independent —
+ * shown in client-facing output when the explanations toggle is on.
+ */
+const METRIC_WHY: Record<string, string> = {
+  llms_txt:
+    "llms.txt gives AI assistants a curated map of your most important pages, improving how accurately they summarise and cite you.",
+  json_ld:
+    "Structured data lets LLMs and search engines parse what your page is about without guessing, making your content easier to quote.",
+  open_graph:
+    "Open Graph tags control how your page looks when shared and give crawlers a clean title, description and image to work from.",
+  twitter_card:
+    "Twitter Card tags ensure a rich, correct preview when your page is shared on X and other platforms that read them.",
+  h1_count:
+    "A single clear H1 tells crawlers the page's main topic; multiple or missing H1s dilute that signal.",
+  heading_hierarchy:
+    "A clean heading order (no skipped levels) helps AI models chunk your content into coherent, citable sections.",
+  word_count:
+    "Pages with enough substantive text give AI models the context they need to answer questions and cite you confidently.",
+  faq: "Question-and-answer content maps directly onto how people prompt AI assistants, making it prime material to be quoted.",
+  semantic_html:
+    "Semantic tags (main, article, nav…) help crawlers separate real content from navigation and boilerplate.",
+  https:
+    "HTTPS is a baseline trust signal; crawlers and search engines deprioritise or distrust pages served without it.",
+  sitemap:
+    "A sitemap helps crawlers discover every page quickly, so none of your content is missed during indexing.",
+  viewport:
+    "A mobile viewport tag signals a responsive page — a ranking and crawl-quality factor for search and AI systems.",
+  ttfb: "A fast first byte means crawlers can fetch more of your pages within their time budget before giving up.",
+  canonical:
+    "A canonical tag consolidates duplicate URLs into one, so ranking and citation signals aren't split across copies.",
+  ai_crawlers:
+    "If robots.txt blocks GPTBot, ClaudeBot and similar agents, your content can't be cited by those AI assistants at all.",
+};
+
 function metric(
   id: string,
   label: string,
@@ -26,7 +61,87 @@ function metric(
   weight = 1,
 ): MetricResult {
   const s = Math.max(0, Math.min(100, Math.round(score)));
-  return { id, label, category, score: s, detail, status: statusFromScore(s), weight };
+  return {
+    id,
+    label,
+    category,
+    score: s,
+    detail,
+    why: METRIC_WHY[id],
+    status: statusFromScore(s),
+    weight,
+  };
+}
+
+/* ---------------------------------------------------------------------- */
+/* robots.txt parsing                                                     */
+/* ---------------------------------------------------------------------- */
+
+/** Major AI/LLM crawler user-agents whose access we care about for GEO. */
+const AI_CRAWLERS = [
+  "GPTBot",
+  "ClaudeBot",
+  "anthropic-ai",
+  "PerplexityBot",
+  "Google-Extended",
+  "CCBot",
+];
+
+interface RobotsGroup {
+  /** Lower-cased user-agent tokens this group applies to. */
+  agents: string[];
+  /** Group contains `Disallow: /` (blocks the whole site). */
+  disallowRoot: boolean;
+  /** Group contains an `Allow: /` (or empty `Disallow:`) that re-opens the root. */
+  allowRoot: boolean;
+}
+
+/**
+ * Tiny robots.txt parser — only resolves enough to answer "is this bot blocked
+ * from the site root?". Consecutive `User-agent:` lines share one group.
+ */
+function parseRobots(robots: string): RobotsGroup[] {
+  const groups: RobotsGroup[] = [];
+  let current: RobotsGroup | null = null;
+  let lastWasAgent = false;
+  for (const raw of robots.split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    if (!line) continue;
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    const field = line.slice(0, idx).trim().toLowerCase();
+    const value = line.slice(idx + 1).trim();
+    if (field === "user-agent") {
+      if (!current || !lastWasAgent) {
+        current = { agents: [], disallowRoot: false, allowRoot: false };
+        groups.push(current);
+      }
+      current.agents.push(value.toLowerCase());
+      lastWasAgent = true;
+      continue;
+    }
+    lastWasAgent = false;
+    if (!current) continue;
+    // An empty `Disallow:` means "allow everything", same as `Allow: /`.
+    if (field === "disallow" && value === "/") current.disallowRoot = true;
+    else if (field === "disallow" && value === "") current.allowRoot = true;
+    else if (field === "allow" && value === "/") current.allowRoot = true;
+  }
+  return groups;
+}
+
+/**
+ * True if `bot` is disallowed from the site root. A bot obeys its own named
+ * group if one exists, otherwise the `*` group; absence of any rule = allowed.
+ */
+function isBotBlocked(groups: RobotsGroup[], bot: string): boolean {
+  const b = bot.toLowerCase();
+  const named = groups.filter((g) => g.agents.includes(b));
+  const relevant = named.length > 0 ? named : groups.filter((g) => g.agents.includes("*"));
+  if (relevant.length === 0) return false;
+  const disallow = relevant.some((g) => g.disallowRoot);
+  const allow = relevant.some((g) => g.allowRoot);
+  return disallow && !allow;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -289,6 +404,27 @@ async function checkTechnical(page: FetchedPage, $: cheerio.CheerioAPI): Promise
       canonical ? `Canonical → ${canonical}` : "No canonical link tag.",
       0.6,
     ),
+  );
+
+  // 6. AI crawler access — robots.txt opt-outs for major LLM crawlers.
+  // A missing robots.txt is not a failure: it means every crawler is allowed.
+  const robots = await fetchRobots(origin);
+  let crawlerScore: number;
+  let crawlerDetail: string;
+  if (robots === null) {
+    crawlerScore = 100;
+    crawlerDetail = "No robots.txt — all AI crawlers allowed by default.";
+  } else {
+    const groups = parseRobots(robots);
+    const blocked = AI_CRAWLERS.filter((bot) => isBotBlocked(groups, bot));
+    crawlerScore = Math.round(((AI_CRAWLERS.length - blocked.length) / AI_CRAWLERS.length) * 100);
+    crawlerDetail =
+      blocked.length === 0
+        ? `robots.txt allows all ${AI_CRAWLERS.length} major AI crawlers.`
+        : `robots.txt blocks ${blocked.length}/${AI_CRAWLERS.length}: ${blocked.join(", ")}.`;
+  }
+  results.push(
+    metric("ai_crawlers", "AI crawler access", "technical", crawlerScore, crawlerDetail, 1.4),
   );
 
   return results;
