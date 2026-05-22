@@ -24,9 +24,9 @@ Node 22+.
 - `src/lib/types.ts` — `MetricResult`, `SiteAudit`, `AuditComparison`. `CATEGORY_WEIGHTS` controls how the three categories combine into the total score.
 - `src/lib/fetcher.ts` — `fetchPage`, `probeUrl`, `fetchRobots`, `normalizeUrl`. All network calls go through here so we can swap in caching / retry without touching metric code.
 - `src/lib/metrics.ts` — pure functions per category (`checkDiscovery`, `checkStructure`, `checkTechnical`) and the `auditSite` entrypoint. **Adding a new metric = add one function call in the right category and let the aggregator do the rest.** Each metric returns 0–100 plus a `weight` (relative within its category) and a one-line `detail` string shown under the bar. Static "why this matters" copy lives in the `METRIC_WHY` map (keyed by metric id) and is attached automatically by the `metric()` helper.
-- `src/app/api/audit/route.ts` — POST endpoint, runs both audits in `Promise.all`, returns `AuditComparison`.
-- `src/app/page.tsx` — input form + result card host + export-to-PNG button (dynamic-imports `html-to-image` so it stays out of the server bundle).
-- `src/components/comparison-card.tsx` — the branded card that gets captured by the PNG exporter. Fixed at 920px wide so the export is consistent. Takes a `showWhy` prop that toggles the per-metric "why this matters" notes on/off (set per audit via the switch on `page.tsx`; affects both the on-screen view and the PNG export since the same node is captured).
+- `src/app/api/audit/route.ts` — POST endpoint. Always audits the client; audits the competitor too (`Promise.all`) only when a non-empty `competitorUrl` is supplied. Returns `AuditComparison` with `competitor` omitted in single-site mode.
+- `src/app/page.tsx` — input form + result card host + export-to-PNG button (dynamic-imports `html-to-image` so it stays out of the server bundle). A "Compare against a competitor" switch (`compareMode`, default off) shows/hides the competitor inputs and decides whether `competitorUrl` is sent.
+- `src/components/comparison-card.tsx` — the branded card that gets captured by the PNG exporter. Fixed at 920px wide so the export is consistent. Derives `isComparison` from `data.competitor`: when absent it renders a single full-width column and switches header copy to "GEO Audit". Takes a `showWhy` prop that toggles the per-metric "why this matters" notes on/off (set per audit via the switch on `page.tsx`; affects both the on-screen view and the PNG export since the same node is captured).
 
 ## Scoring model
 
@@ -43,6 +43,7 @@ If you change weights or add/remove metrics, the result card auto-adapts — it 
 
 ### Done
 
+- **Single-site mode** — the competitor is optional. `AuditComparison.competitor` is `competitor?: SiteAudit`; the API skips the second audit when no `competitorUrl` is sent; `page.tsx` has a `compareMode` switch; `comparison-card.tsx` renders a one-column "GEO Audit" card when `data.competitor` is absent.
 - **AI crawler access check** — `ai_crawlers` metric in the `technical` category. `fetchRobots` in `fetcher.ts` + the `parseRobots`/`isBotBlocked` helpers in `metrics.ts` check robots.txt opt-outs for GPTBot, ClaudeBot, anthropic-ai, PerplexityBot, Google-Extended, CCBot. Folded into `technical` (not a new category) because a missing robots.txt still leaves all crawlers free — it's an opt-out signal, not a hard access gate.
 - **Per-metric "why this matters" notes** — `METRIC_WHY` copy + `showWhy` toggle on the card (see Architecture above).
 

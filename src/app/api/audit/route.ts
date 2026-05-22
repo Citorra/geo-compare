@@ -17,28 +17,25 @@ export async function POST(req: NextRequest) {
   const clientUrl = normalizeUrl(body.clientUrl ?? "");
   const competitorUrl = normalizeUrl(body.competitorUrl ?? "");
 
-  if (!clientUrl || !competitorUrl) {
-    return NextResponse.json(
-      { error: "Both clientUrl and competitorUrl are required." },
-      { status: 400 },
-    );
+  if (!clientUrl) {
+    return NextResponse.json({ error: "clientUrl is required." }, { status: 400 });
   }
 
   try {
     new URL(clientUrl);
-    new URL(competitorUrl);
+    if (competitorUrl) new URL(competitorUrl);
   } catch {
     return NextResponse.json({ error: "One of the URLs is not valid." }, { status: 400 });
   }
 
   const [client, competitor] = await Promise.all([
     auditSite(clientUrl),
-    auditSite(competitorUrl),
+    competitorUrl ? auditSite(competitorUrl) : Promise.resolve(undefined),
   ]);
 
   const payload: AuditComparison = {
     client,
-    competitor,
+    ...(competitor ? { competitor } : {}),
     generatedAt: new Date().toISOString(),
   };
 

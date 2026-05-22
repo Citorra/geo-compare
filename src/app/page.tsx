@@ -15,6 +15,7 @@ export default function Page() {
   const [competitorUrl, setCompetitorUrl] = React.useState("");
   const [clientLabel, setClientLabel] = React.useState("");
   const [competitorLabel, setCompetitorLabel] = React.useState("");
+  const [compareMode, setCompareMode] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const [showWhy, setShowWhy] = React.useState(false);
@@ -31,7 +32,10 @@ export default function Page() {
       const res = await fetch("/api/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clientUrl, competitorUrl }),
+        body: JSON.stringify({
+          clientUrl,
+          competitorUrl: compareMode ? competitorUrl : "",
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Audit failed.");
@@ -61,7 +65,9 @@ export default function Page() {
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-|-$/g, "")
           .slice(0, 40);
-      a.download = `citorra-audit-${slug(clientUrl)}-vs-${slug(competitorUrl)}.png`;
+      a.download = data?.competitor
+        ? `citorra-audit-${slug(data.client.url)}-vs-${slug(data.competitor.url)}.png`
+        : `citorra-audit-${slug(data?.client.url ?? clientUrl)}.png`;
       a.href = dataUrl;
       a.click();
     } catch (err) {
@@ -76,8 +82,8 @@ export default function Page() {
       <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight">Citorra · GEO Compare</h1>
         <p className="text-muted-foreground mt-1">
-          Static, no-LLM metrics comparison between a client site and a competitor.
-          Exportable as a Citorra-branded PNG.
+          Static, no-LLM GEO metrics for a single site — or side by side against a
+          competitor. Exportable as a Citorra-branded PNG.
         </p>
       </header>
 
@@ -85,12 +91,18 @@ export default function Page() {
         <CardHeader>
           <CardTitle>Run a snapshot</CardTitle>
           <CardDescription>
-            Enter two URLs. We fetch each page server-side and score llms.txt / schema /
-            structure / technical signals.
+            Enter a URL — we fetch the page server-side and score llms.txt / schema /
+            structure / technical signals. Toggle on a competitor to compare side by side.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={runAudit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2 flex items-center gap-2">
+              <Switch id="compare-mode" checked={compareMode} onCheckedChange={setCompareMode} />
+              <Label htmlFor="compare-mode" className="cursor-pointer font-normal">
+                Compare against a competitor
+              </Label>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="client-url">Client URL</Label>
               <Input
@@ -110,25 +122,27 @@ export default function Page() {
                 onChange={(e) => setClientLabel(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="competitor-url">Competitor URL</Label>
-              <Input
-                id="competitor-url"
-                placeholder="https://competitor.com"
-                value={competitorUrl}
-                onChange={(e) => setCompetitorUrl(e.target.value)}
-                required
-              />
-              <Label htmlFor="competitor-label" className="pt-2 block">
-                Competitor display name <span className="text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Input
-                id="competitor-label"
-                placeholder="e.g. Rival Co."
-                value={competitorLabel}
-                onChange={(e) => setCompetitorLabel(e.target.value)}
-              />
-            </div>
+            {compareMode && (
+              <div className="space-y-2">
+                <Label htmlFor="competitor-url">Competitor URL</Label>
+                <Input
+                  id="competitor-url"
+                  placeholder="https://competitor.com"
+                  value={competitorUrl}
+                  onChange={(e) => setCompetitorUrl(e.target.value)}
+                  required
+                />
+                <Label htmlFor="competitor-label" className="pt-2 block">
+                  Competitor display name <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="competitor-label"
+                  placeholder="e.g. Rival Co."
+                  value={competitorLabel}
+                  onChange={(e) => setCompetitorLabel(e.target.value)}
+                />
+              </div>
+            )}
             <div className="md:col-span-2 flex items-center gap-3 pt-1">
               <Button type="submit" disabled={loading} size="lg">
                 {loading ? (
@@ -139,7 +153,7 @@ export default function Page() {
                 ) : (
                   <>
                     <Search className="h-4 w-4" />
-                    Run comparison
+                    {compareMode ? "Run comparison" : "Run analysis"}
                   </>
                 )}
               </Button>

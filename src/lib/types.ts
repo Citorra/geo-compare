@@ -36,7 +36,8 @@ export interface SiteAudit {
 
 export interface AuditComparison {
   client: SiteAudit;
-  competitor: SiteAudit;
+  /** Absent in single-site mode (no competitor toggled on). */
+  competitor?: SiteAudit;
   generatedAt: string;
 }
 

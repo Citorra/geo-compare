@@ -44,11 +44,17 @@ const ComparisonCard = React.forwardRef<HTMLDivElement, Props>(function Comparis
   { data, clientLabel, competitorLabel, showWhy = false },
   ref,
 ) {
-  const { client, competitor } = data;
+  const { client } = data;
+  const competitor = data.competitor;
+  const isComparison = !!competitor;
 
-  // Group metrics by category, using the union of ids from both audits
+  // Group metrics by category. In comparison mode, use the union of ids from
+  // both audits; in single-site mode, just the client's metrics.
   const allIds = Array.from(
-    new Set([...client.metrics.map((m) => m.id), ...competitor.metrics.map((m) => m.id)]),
+    new Set([
+      ...client.metrics.map((m) => m.id),
+      ...(competitor?.metrics.map((m) => m.id) ?? []),
+    ]),
   );
 
   const rowsByCat: Record<MetricCategory, ReturnType<typeof metricRow>[]> = {
@@ -58,7 +64,7 @@ const ComparisonCard = React.forwardRef<HTMLDivElement, Props>(function Comparis
   };
   for (const id of allIds) {
     const c = client.metrics.find((m) => m.id === id);
-    const k = competitor.metrics.find((m) => m.id === id);
+    const k = competitor?.metrics.find((m) => m.id === id);
     const cat = (c?.category ?? k?.category) as MetricCategory | undefined;
     if (!cat) continue;
     rowsByCat[cat].push(metricRow(c, k));
@@ -83,34 +89,47 @@ const ComparisonCard = React.forwardRef<HTMLDivElement, Props>(function Comparis
             C
           </div>
           <div className="leading-tight">
-            <div className="font-semibold text-base">Citorra · GEO Snapshot</div>
-            <div className="text-xs text-citorra-mute">Static metrics comparison · {date}</div>
+            <div className="font-semibold text-base">
+              Citorra · {isComparison ? "GEO Snapshot" : "GEO Audit"}
+            </div>
+            <div className="text-xs text-citorra-mute">
+              {isComparison ? "Static metrics comparison" : "Static metrics audit"} · {date}
+            </div>
           </div>
         </div>
         <div className="text-xs text-citorra-mute">citorra.com</div>
       </div>
 
       {/* Totals */}
-      <div className="grid grid-cols-2 gap-0 border-b">
+      <div
+        className={cn(
+          "grid gap-0 border-b",
+          isComparison ? "grid-cols-2" : "grid-cols-1",
+        )}
+      >
         <SiteHeader
           site={client}
           label={clientLabel || hostnameOf(client.url)}
+          eyebrow={isComparison ? "Client" : "Audited site"}
           color="primary"
         />
-        <SiteHeader
-          site={competitor}
-          label={competitorLabel || hostnameOf(competitor.url)}
-          color="muted"
-        />
+        {competitor && (
+          <SiteHeader
+            site={competitor}
+            label={competitorLabel || hostnameOf(competitor.url)}
+            eyebrow="Competitor"
+            color="muted"
+          />
+        )}
       </div>
 
       {/* Fetch errors */}
-      {(!client.fetchOk || !competitor.fetchOk) && (
+      {(!client.fetchOk || (competitor && !competitor.fetchOk)) && (
         <div className="px-8 py-3 text-sm bg-red-50 text-red-700 border-b">
           {!client.fetchOk && (
             <div>Client fetch failed: {client.fetchError || "unknown error"}</div>
           )}
-          {!competitor.fetchOk && (
+          {competitor && !competitor.fetchOk && (
             <div>Competitor fetch failed: {competitor.fetchError || "unknown error"}</div>
           )}
         </div>
@@ -123,8 +142,9 @@ const ComparisonCard = React.forwardRef<HTMLDivElement, Props>(function Comparis
             key={cat}
             title={CATEGORY_LABELS[cat]}
             clientScore={client.categoryScores[cat]}
-            competitorScore={competitor.categoryScores[cat]}
+            competitorScore={competitor?.categoryScores[cat]}
             rows={rowsByCat[cat]}
+            isComparison={isComparison}
             showWhy={showWhy}
           />
         ))}
@@ -152,10 +172,12 @@ function scoreColor(score: number) {
 function SiteHeader({
   site,
   label,
+  eyebrow,
   color,
 }: {
   site: SiteAudit;
   label: string;
+  eyebrow: string;
   color: "primary" | "muted";
 }) {
   return (
@@ -165,9 +187,7 @@ function SiteHeader({
         color === "primary" ? "bg-citorra/5" : "bg-secondary/30",
       )}
     >
-      <div className="text-xs uppercase tracking-wide text-citorra-mute">
-        {color === "primary" ? "Client" : "Competitor"}
-      </div>
+      <div className="text-xs uppercase tracking-wide text-citorra-mute">{eyebrow}</div>
       <div className="mt-1 font-semibold text-lg truncate">{label}</div>
       <div className="text-xs text-citorra-mute truncate">{hostnameOf(site.finalUrl || site.url)}</div>
       <div className="mt-4 flex items-end gap-3">
@@ -183,12 +203,14 @@ function CategoryBlock({
   clientScore,
   competitorScore,
   rows,
+  isComparison,
   showWhy,
 }: {
   title: string;
   clientScore: number;
-  competitorScore: number;
+  competitorScore?: number;
   rows: ReturnType<typeof metricRow>[];
+  isComparison: boolean;
   showWhy: boolean;
 }) {
   return (
@@ -198,33 +220,60 @@ function CategoryBlock({
           {title}
         </h3>
         <div className="text-xs text-citorra-mute tabular-nums">
-          Client <span className="font-semibold text-citorra-ink">{clientScore}</span>
-          {" · "}
-          Competitor <span className="font-semibold text-citorra-ink">{competitorScore}</span>
+          {isComparison ? (
+            <>
+              Client <span className="font-semibold text-citorra-ink">{clientScore}</span>
+              {" · "}
+              Competitor{" "}
+              <span className="font-semibold text-citorra-ink">{competitorScore}</span>
+            </>
+          ) : (
+            <>
+              Score <span className="font-semibold text-citorra-ink">{clientScore}</span>
+            </>
+          )}
         </div>
       </div>
       <div className="divide-y divide-border/60 rounded-lg border bg-background/40">
         {rows.map((row) => (
-          <MetricRow key={row.label} row={row} showWhy={showWhy} />
+          <MetricRow key={row.label} row={row} isComparison={isComparison} showWhy={showWhy} />
         ))}
       </div>
     </section>
   );
 }
 
-function MetricRow({ row, showWhy }: { row: ReturnType<typeof metricRow>; showWhy: boolean }) {
+function MetricRow({
+  row,
+  isComparison,
+  showWhy,
+}: {
+  row: ReturnType<typeof metricRow>;
+  isComparison: boolean;
+  showWhy: boolean;
+}) {
   const why = row.client?.why || row.competitor?.why;
   return (
     <div className="px-4 py-3">
-      <div className="grid grid-cols-[1.1fr_1fr_1fr] gap-4 items-center">
+      <div
+        className={cn(
+          "grid gap-4 items-center",
+          isComparison ? "grid-cols-[1.1fr_1fr_1fr]" : "grid-cols-[1.1fr_1fr]",
+        )}
+      >
         <div className="text-sm font-medium leading-tight">
           <div>{row.label}</div>
           <div className="text-xs text-citorra-mute mt-0.5 line-clamp-2">
             {row.client?.detail || row.competitor?.detail}
           </div>
         </div>
-        <BarCell score={row.clientScore} highlight={row.winner === "client"} />
-        <BarCell score={row.competitorScore} highlight={row.winner === "competitor"} muted />
+        <BarCell
+          score={row.clientScore}
+          highlight={isComparison && row.winner === "client"}
+        />
+        {isComparison && (
+          <BarCell score={row.competitorScore} highlight={row.winner === "competitor"} muted />
+        )}
       </div>
       {showWhy && why && (
         <div className="mt-2 text-xs text-citorra-mute bg-secondary/50 rounded-md px-3 py-2 leading-snug">

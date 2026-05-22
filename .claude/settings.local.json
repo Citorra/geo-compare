@@ -15,7 +15,12 @@
       "Bash(git add *)",
       "Bash(git -c user.name=sovintz -c commit.gpgsign=false commit -m ' *)",
       "Bash(gh repo *)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(git push *)",
+      "Bash(dir src\\\\components\\\\ui /b)",
+      "Bash(git commit -m '@ *)",
+      "Bash(git commit *)",
+      "Bash(rm .git/COMMIT_MSG_TMP.txt)"
     ]
   }
 }
