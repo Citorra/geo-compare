@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm audit *)",
+      "Bash(npm view *)",
+      "Bash(npm install *)",
+      "Bash(node -e \"const p=require\\('./node_modules/eslint-config-next/package.json'\\); console.log\\('version',p.version\\); console.log\\('exports',JSON.stringify\\(p.exports\\)\\); console.log\\('main',p.main\\)\")",
+      "Bash(node -e \"const c=require\\('./node_modules/eslint-config-next/dist/index.js'\\); console.log\\('type:', Array.isArray\\(c\\)?'array len '+c.length : typeof c\\); console.log\\('keys:', Array.isArray\\(c\\)?'':Object.keys\\(c.default||c\\)\\)\")",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(gh api *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git -c user.name=sovintz -c commit.gpgsign=false commit -m ' *)"
+    ]
+  }
+}
