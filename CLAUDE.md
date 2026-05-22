@@ -6,7 +6,7 @@ This project is a **static GEO metrics comparison tool** for Citorra. It's the l
 
 Takes a client URL and a competitor URL → fetches each page server-side → runs 14 static checks → renders side-by-side progress bars and a weighted total score → one-click PNG export of the result card (Citorra-branded).
 
-Stack: Next.js 14 App Router (`pages` not used), TypeScript strict, Tailwind + shadcn/ui primitives (local copies under `src/components/ui/`), cheerio for HTML parsing, `html-to-image` for the PNG export.
+Stack: Next.js 16 App Router (`pages` not used), React 19, TypeScript strict, Tailwind + shadcn/ui primitives (local copies under `src/components/ui/`), cheerio for HTML parsing, `html-to-image` for the PNG export.
 
 ## Run
 
