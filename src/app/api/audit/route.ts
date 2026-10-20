@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { auditSite } from "@/lib/metrics";
 import { normalizeUrl } from "@/lib/fetcher";
+import { logRunToN8n } from "@/lib/n8n-log";
 import type { AuditComparison } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -53,6 +54,9 @@ export async function POST(req: NextRequest) {
     ...(competitor ? { competitor } : {}),
     generatedAt: new Date().toISOString(),
   };
+
+  // Runs after the response is sent; never blocks or fails the audit.
+  after(() => logRunToN8n(payload));
 
   return corsJson(payload);
 }
